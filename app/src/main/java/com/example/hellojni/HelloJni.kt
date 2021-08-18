@@ -15,10 +15,17 @@
  */
 package com.example.hellojni
 
+import android.content.Intent
+import android.content.res.AssetManager
+import android.os.Build
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import com.example.hellojni.databinding.ActivityHelloJniBinding
 import android.util.Log
+import kotlinx.android.synthetic.main.activity_hello_jni.*
+import java.io.BufferedReader
+import java.io.FileReader
+import java.io.IOException
 import java.lang.Error
 
 class HelloJni : AppCompatActivity() {
@@ -32,7 +39,33 @@ class HelloJni : AppCompatActivity() {
          */
         val binding = ActivityHelloJniBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        binding.helloTextview.text = stringFromJNI()
+
+        binding.btnShare.setOnClickListener {
+            //Get text from TextView and store in variable "s"
+            val s = binding.helloTextview.text.toString()
+            //Intent to share the text
+            val shareIntent = Intent()
+            shareIntent.action = Intent.ACTION_SEND
+            shareIntent.type="text/plain"
+            shareIntent.putExtra(Intent.EXTRA_TEXT, s);
+            startActivity(Intent.createChooser(shareIntent,"Share via"))
+        }
+
+        binding.btnRun.setOnClickListener {
+            Thread {
+                this@HelloJni.runOnUiThread(java.lang.Runnable {
+                    this.hello_textview.text = "running ..."
+                })
+                val num_cpu_cores = Runtime.getRuntime().availableProcessors()
+                val cpu_info = getCPUInfo()
+                val stringFromJNI = stringFromJNI(this.applicationContext.assets)
+                // val stringFromJNI = "stringFromJNI"
+                this@HelloJni.runOnUiThread(java.lang.Runnable {
+                    this.hello_textview.text = stringFromJNI +
+                            "\nmodel: " + Build.MODEL + "\ncores: " + num_cpu_cores + "\ncpu_info: " + cpu_info
+                })
+            }.start()
+        }
     }
 
     /*
@@ -40,20 +73,27 @@ class HelloJni : AppCompatActivity() {
      * 'hello-jni' native library, which is packaged
      * with this application.
      */
-    external fun stringFromJNI(): String?
+    external fun stringFromJNI(assetManager: AssetManager): String?
 
-    /*
-     * This is another native method declaration that is *not*
-     * implemented by 'hello-jni'. This is simply to show that
-     * you can declare as many native methods in your Java code
-     * as you want, their implementation is searched in the
-     * currently loaded native libraries only the first time
-     * you call them.
-     *
-     * Trying to call this function will result in a
-     * java.lang.UnsatisfiedLinkError exception !
-     */
-    external fun unimplementedStringFromJNI(): String?
+    @Throws(IOException::class)
+    fun getCPUInfo(): String? {
+        val br = BufferedReader(FileReader("/proc/cpuinfo"))
+        var str: String = ""
+        val output: MutableMap<String, String> = HashMap()
+        while (true) {
+            val r = br.readLine() ?: break
+            str = r
+            val data = str.split(":").toTypedArray()
+            if (data.size > 1) {
+                var key = data[0].trim { it <= ' ' }.replace(" ", "_")
+                if (key == "model_name") key = "cpu_model"
+                output[key] = data[1].trim { it <= ' ' }
+            }
+        }
+
+        br.close()
+        return output.toString()
+    }
 
     companion object {
     /*
